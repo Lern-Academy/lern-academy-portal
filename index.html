@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Lern Academy — Stunden melden</title>
+  <style>
+    :root {
+      --accent: #0e7c7b; --accent-strong: #0a5f5e; --ink: #0e1726; --muted: #5b6b7a;
+      --line: #e3e8ee; --bg: #f5f7f9; --card: #ffffff; --good: #0f7b43; --danger: #c0362c;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--ink);
+      line-height: 1.5; padding: 16px; max-width: 640px; margin: 0 auto; }
+    header { display: flex; align-items: center; gap: 12px; padding: 8px 0 20px; }
+    .logo { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px;
+      background: var(--accent); color: #fff; font-weight: 700; }
+    h1 { font-size: 18px; } .sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+    .greet { font-size: 15px; } .greet b { color: var(--accent-strong); }
+    label { display: block; font-size: 12px; font-weight: 600; margin: 10px 0 4px; color: var(--muted); }
+    select, input { width: 100%; font-size: 16px; padding: 11px 12px; border: 1px solid var(--line);
+      border-radius: 10px; background: #fff; color: var(--ink); }
+    select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14,124,123,.15); }
+    .row { display: grid; grid-template-columns: 1fr 120px; gap: 10px; }
+    button { font-size: 15px; font-weight: 600; border: none; border-radius: 10px; padding: 12px 16px;
+      cursor: pointer; transition: .15s; }
+    .btn-add { width: 100%; background: #eef4f4; color: var(--accent-strong); margin-top: 12px; }
+    .btn-add:active { background: #e2eeee; }
+    .btn-send { width: 100%; background: var(--accent); color: #fff; margin-top: 8px; }
+    .btn-send:disabled { opacity: .5; cursor: default; }
+    .pending { list-style: none; margin-top: 8px; }
+    .pending li { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: #f5f8f8; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; margin-top: 6px; font-size: 14px; }
+    .pending .rm { background: none; color: var(--danger); font-size: 18px; padding: 0 6px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .banner { padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 14px; }
+    .banner.good { background: #e7f6ee; color: var(--good); }
+    .banner.err { background: #fbeae9; color: var(--danger); }
+    .center { text-align: center; padding: 40px 16px; color: var(--muted); }
+    .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 20px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">LA</div>
+    <div><h1>Stunden melden</h1><div class="sub">Lern Academy · Zürich</div></div>
+  </header>
+
+  <div id="app"><div class="center">Lädt …</div></div>
+  <div class="foot">Bei Fragen wende dich an die Lern Academy.</div>
+
+  <script>
+    // Public config (safe to expose): the publishable key + project URL.
+    const SUPABASE_URL = 'https://bkyvxrakjmhcwwwgzwsq.supabase.co';
+    const ANON_KEY = 'sb_publishable_VcpvUci4ThIkcGoexJtocQ_646RW64T';
+
+    const app = document.getElementById('app');
+    const token = new URLSearchParams(location.search).get('t') || '';
+    const pending = [];
+    let pensa = [];
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    async function rpc(fn, body) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: 'POST',
+        headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Netzwerkfehler (' + res.status + ')');
+      return res.json();
+    }
+
+    function showError(msg) {
+      app.innerHTML = `<div class="banner err">${esc(msg)}</div>`;
+    }
+
+    function render(tutorName, banner) {
+      const opts = pensa.map((p) => `<option value="${esc(p.pensum_id)}">${esc(p.child_name || p.pensum_id)} · ${esc(p.subject)}</option>`).join('');
+      app.innerHTML = `
+        ${banner ? `<div class="banner good">${esc(banner)}</div>` : ''}
+        <div class="card"><div class="greet">Hallo <b>${esc(tutorName)}</b> 👋<div class="note">Trage deine gehaltenen Lektionen ein und sende sie ab.</div></div></div>
+        ${pensa.length === 0
+          ? `<div class="card muted">Aktuell sind dir keine aktiven Pensa zugewiesen.</div>`
+          : `<div class="card">
+              <label>Pensum</label>
+              <select id="pensum">${opts}</select>
+              <div class="row">
+                <div><label>Datum</label><input type="date" id="date" /></div>
+                <div><label>Dauer (Min)</label><input type="number" id="minutes" value="60" min="1" step="5" /></div>
+              </div>
+              <button class="btn-add" id="add">＋ Lektion hinzufügen</button>
+              <ul class="pending" id="pending"></ul>
+              <button class="btn-send" id="send" disabled>Absenden</button>
+            </div>`}
+      `;
+      if (pensa.length > 0) wire();
+    }
+
+    function renderPending() {
+      const ul = document.getElementById('pending');
+      ul.innerHTML = pending.map((e, i) => {
+        const p = pensa.find((x) => x.pensum_id === e.pensum_id);
+        const d = e.date.split('-').reverse().join('.');
+        return `<li><span>${esc(p ? (p.child_name || p.pensum_id) : e.pensum_id)} · ${esc(d)} · ${e.minutes} Min</span><button class="rm" data-i="${i}">✕</button></li>`;
+      }).join('');
+      document.getElementById('send').disabled = pending.length === 0;
+      ul.querySelectorAll('.rm').forEach((b) => b.onclick = () => { pending.splice(+b.dataset.i, 1); renderPending(); });
+    }
+
+    function wire() {
+      const dateEl = document.getElementById('date');
+      dateEl.value = new Date().toISOString().slice(0, 10);
+      document.getElementById('add').onclick = () => {
+        const pensum_id = document.getElementById('pensum').value;
+        const date = dateEl.value;
+        const minutes = parseInt(document.getElementById('minutes').value, 10);
+        if (!pensum_id || !date || !(minutes > 0)) return;
+        pending.push({ pensum_id, date, minutes });
+        renderPending();
+      };
+      document.getElementById('send').onclick = send;
+      renderPending();
+    }
+
+    async function send() {
+      const btn = document.getElementById('send');
+      btn.disabled = true; btn.textContent = 'Sendet …';
+      try {
+        const r = await rpc('portal_submit', { p_token: token, p_entries: pending });
+        if (!r || r.ok !== true) throw new Error('Absenden fehlgeschlagen.');
+        const n = r.created || 0;
+        pending.length = 0;
+        await load(`${n} Lektion(en) erfolgreich gemeldet. Vielen Dank!`);
+      } catch (e) {
+        btn.disabled = false; btn.textContent = 'Absenden';
+        const b = document.createElement('div');
+        b.className = 'banner err'; b.textContent = e.message || 'Fehler beim Absenden.';
+        app.prepend(b);
+      }
+    }
+
+    async function load(banner) {
+      if (!token) return showError('Ungültiger Link — kein Zugangscode gefunden.');
+      try {
+        const data = await rpc('portal_get', { p_token: token });
+        if (!data || data.ok !== true) return showError('Dieser Link ist ungültig oder wurde deaktiviert. Bitte wende dich an die Lern Academy.');
+        pensa = data.pensa || [];
+        render(data.tutor.name, banner);
+      } catch (e) {
+        showError(e.message || 'Verbindungsfehler. Bitte später erneut versuchen.');
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

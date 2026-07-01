@@ -24,35 +24,31 @@
     select, input { width: 100%; font-size: 16px; padding: 11px 12px; border: 1px solid var(--line);
       border-radius: 10px; background: #fff; color: var(--ink); }
     select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(14,124,123,.15); }
-    .row { display: grid; grid-template-columns: 1fr 120px; gap: 10px; }
-    button { font-size: 15px; font-weight: 600; border: none; border-radius: 10px; padding: 12px 16px;
-      cursor: pointer; transition: .15s; }
-    .btn-add { width: 100%; background: #eef4f4; color: var(--accent-strong); margin-top: 12px; }
-    .btn-add:active { transform: scale(.99); }
-    .btn-add.ok { background: var(--good); color: #fff; }
-    .btn-send { width: 100%; background: var(--accent); color: #fff; margin-top: 4px; }
-    .btn-send:disabled { opacity: .45; cursor: default; }
-    .added-msg { text-align: center; color: var(--good); font-size: 13px; font-weight: 600; height: 18px;
-      margin-top: 8px; opacity: 0; transition: opacity .2s; }
-    .added-msg.show { opacity: 1; }
-    .list-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-    .count { background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 1px 9px; }
-    .pending { list-style: none; }
-    .pending li { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    .row { display: grid; grid-template-columns: 1fr 130px; gap: 10px; }
+    .remain { margin-top: 6px; font-size: 13px; color: var(--muted); }
+    .remain b { color: var(--ink); }
+    button { font-size: 16px; font-weight: 700; border: none; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: .15s; }
+    .btn-send { width: 100%; background: var(--accent); color: #fff; margin-top: 16px; }
+    .btn-send:disabled { opacity: .5; cursor: default; }
+    .btn-send.ok { background: var(--good); }
+    .msg { text-align: center; color: var(--good); font-size: 13px; font-weight: 600; height: 18px; margin-top: 8px; opacity: 0; transition: opacity .2s; }
+    .msg.show { opacity: 1; }
+    .log { list-style: none; }
+    .log li { display: flex; align-items: center; justify-content: space-between; gap: 8px;
       background: #f5f8f8; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 14px; }
-    .pending li .what { font-weight: 600; }
-    .pending li.just-added { animation: pop .18s ease, flash 1.3s ease; }
+    .log li .what { font-weight: 600; }
+    .log li .tick { color: var(--good); font-weight: 700; }
+    .log li:first-child { animation: pop .18s ease, flash 1.3s ease; }
     @keyframes pop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
     @keyframes flash { from { background: #d7efe1; border-color: var(--good); } to { background: #f5f8f8; } }
-    .pending .rm { background: none; color: var(--danger); font-size: 18px; padding: 0 6px; }
-    .empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+    .empty { color: var(--muted); font-size: 13px; padding: 8px 2px; }
     .muted { color: var(--muted); font-size: 13px; }
     .banner { padding: 12px 14px; border-radius: 10px; font-size: 14px; margin-bottom: 14px; }
     .banner.good { background: #e7f6ee; color: var(--good); }
     .banner.err { background: #fbeae9; color: var(--danger); }
     .center { text-align: center; padding: 40px 16px; color: var(--muted); }
     .foot { text-align: center; color: var(--muted); font-size: 12px; padding: 20px 0; }
-    @media (prefers-reduced-motion: reduce) { .pending li.just-added { animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .log li:first-child { animation: none; } }
   </style>
 </head>
 <body>
@@ -71,14 +67,13 @@
 
     const app = document.getElementById('app');
     const token = new URLSearchParams(location.search).get('t') || '';
-    const pending = [];
     let pensa = [];
-    let justAdded = -1;
+    const logged = []; // lessons reported this session (for reassurance)
 
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const deDate = (iso) => iso.split('-').reverse().join('.');
+    const hrs = (m) => (m / 60).toLocaleString('de-CH', { maximumFractionDigits: 1 });
 
-    // Duration options in fixed 5-minute steps (15–240) — no free typing, so no 61 or 77.34.
     function minuteOptions(selected) {
       let out = '';
       for (let m = 15; m <= 240; m += 5) out += `<option value="${m}"${m === selected ? ' selected' : ''}>${m} Min</option>`;
@@ -91,13 +86,10 @@
         res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
           method: 'POST',
           headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, 'content-type': 'application/json' },
-          body: JSON.stringify(body),
-          cache: 'no-store',
+          body: JSON.stringify(body), cache: 'no-store',
         });
-      } catch (e) {
-        throw new Error('Keine Verbindung zum Server. Bist du online?');
-      }
-      if (!res.ok) throw new Error(`Serverfehler bei „${fn}" (Code ${res.status}). Bitte Seite neu laden (Strg+Shift+R).`);
+      } catch (e) { throw new Error('Keine Verbindung zum Server. Bist du online?'); }
+      if (!res.ok) throw new Error(`Serverfehler bei „${fn}" (Code ${res.status}).`);
       return res.json();
     }
 
@@ -107,83 +99,80 @@
       const opts = pensa.map((p) => `<option value="${esc(p.pensum_id)}">${esc(p.child_name || p.pensum_id)} · ${esc(p.subject)}</option>`).join('');
       app.innerHTML = `
         ${banner ? `<div class="banner good">${esc(banner)}</div>` : ''}
-        <div class="card"><div class="greet">Hallo <b>${esc(tutorName)}</b> 👋<div class="muted" style="margin-top:4px">Erfasse deine gehaltenen Lektionen und sende sie am Schluss ab.</div></div></div>
+        <div class="card"><div class="greet">Hallo <b>${esc(tutorName)}</b> 👋
+          <div class="muted" style="margin-top:4px">Melde jede gehaltene Lektion einzeln mit „Lektion melden".</div></div></div>
         ${pensa.length === 0
           ? `<div class="card muted">Aktuell sind dir keine aktiven Pensa zugewiesen.</div>`
           : `<div class="card">
-              <div class="section-title">Neue Lektion</div>
+              <div class="section-title">Lektion melden</div>
               <label>Pensum</label>
               <select id="pensum">${opts}</select>
+              <div class="remain" id="remain"></div>
               <div class="row">
                 <div><label>Datum</label><input type="date" id="date" /></div>
-                <div><label>Dauer (Min)</label><select id="minutes">${minuteOptions(60)}</select></div>
+                <div><label>Dauer</label><select id="minutes">${minuteOptions(60)}</select></div>
               </div>
-              <button class="btn-add" id="add">＋ Zur Liste hinzufügen</button>
-              <div class="added-msg" id="addedMsg"></div>
+              <button class="btn-send" id="submit">Lektion melden</button>
+              <div class="msg" id="msg"></div>
             </div>
             <div class="card">
-              <div class="list-head"><div class="section-title" style="margin:0">Erfasste Lektionen</div><span class="count" id="count">0</span></div>
-              <ul class="pending" id="pending"></ul>
-              <div class="empty" id="empty">Noch keine Lektion hinzugefügt.</div>
-              <button class="btn-send" id="send" disabled>Absenden</button>
+              <div class="section-title">In dieser Sitzung gemeldet</div>
+              <ul class="log" id="log"></ul>
+              <div class="empty" id="empty">Noch nichts gemeldet.</div>
             </div>`}
       `;
       if (pensa.length > 0) wire();
     }
 
-    function renderPending() {
-      const ul = document.getElementById('pending');
-      ul.innerHTML = pending.map((e, i) => {
+    function updateRemain() {
+      const p = pensa.find((x) => x.pensum_id === document.getElementById('pensum').value);
+      document.getElementById('remain').innerHTML = p ? `Verbleibendes Guthaben: <b>${hrs(p.remaining_minutes)} Std.</b>` : '';
+    }
+
+    function renderLog() {
+      const ul = document.getElementById('log');
+      ul.innerHTML = logged.map((e) => {
         const p = pensa.find((x) => x.pensum_id === e.pensum_id);
-        return `<li class="${i === justAdded ? 'just-added' : ''}">
-          <span class="what">${esc(p ? (p.child_name || p.pensum_id) : e.pensum_id)}</span>
-          <span class="muted">${esc(deDate(e.date))} · ${e.minutes} Min</span>
-          <button class="rm" data-i="${i}" title="Entfernen">✕</button></li>`;
+        return `<li><span class="what">${esc(p ? (p.child_name || p.pensum_id) : e.pensum_id)}</span>
+          <span class="muted">${esc(deDate(e.date))} · ${e.minutes} Min</span><span class="tick">✓</span></li>`;
       }).join('');
-      justAdded = -1;
-      document.getElementById('count').textContent = String(pending.length);
-      document.getElementById('empty').style.display = pending.length ? 'none' : 'block';
-      document.getElementById('send').disabled = pending.length === 0;
-      ul.querySelectorAll('.rm').forEach((b) => (b.onclick = () => { pending.splice(+b.dataset.i, 1); renderPending(); }));
+      document.getElementById('empty').style.display = logged.length ? 'none' : 'block';
     }
 
     function wire() {
       const dateEl = document.getElementById('date');
       dateEl.value = new Date().toISOString().slice(0, 10);
-      const addBtn = document.getElementById('add');
-      addBtn.onclick = () => {
-        const pensum_id = document.getElementById('pensum').value;
-        const date = dateEl.value;
-        const minutes = parseInt(document.getElementById('minutes').value, 10);
-        if (!pensum_id || !date || !(minutes > 0)) return;
-        pending.push({ pensum_id, date, minutes });
-        justAdded = pending.length - 1;
-        renderPending();
-        // clear feedback: flash the button + a short confirmation, so it's obvious a lesson was saved
-        addBtn.classList.add('ok'); addBtn.textContent = '✓ Hinzugefügt';
-        const msg = document.getElementById('addedMsg');
-        msg.textContent = 'Lektion zur Liste hinzugefügt — du kannst gleich die nächste erfassen.'; msg.classList.add('show');
-        setTimeout(() => { addBtn.classList.remove('ok'); addBtn.textContent = '＋ Zur Liste hinzufügen'; }, 900);
-        setTimeout(() => msg.classList.remove('show'), 2200);
-        document.getElementById('minutes').value = '60';
-      };
-      document.getElementById('send').onclick = send;
-      renderPending();
+      document.getElementById('pensum').onchange = updateRemain;
+      document.getElementById('submit').onclick = submitOne;
+      updateRemain();
+      renderLog();
     }
 
-    async function send() {
-      const btn = document.getElementById('send');
-      btn.disabled = true; btn.textContent = 'Sendet …';
+    async function submitOne() {
+      const btn = document.getElementById('submit');
+      const pensum_id = document.getElementById('pensum').value;
+      const date = document.getElementById('date').value;
+      const minutes = parseInt(document.getElementById('minutes').value, 10);
+      if (!pensum_id || !date || !(minutes > 0)) return;
+
+      btn.disabled = true; btn.textContent = 'Meldet …';
       try {
-        const r = await rpc('portal_submit', { p_token: token, p_entries: pending });
-        if (!r || r.ok !== true) throw new Error('Absenden fehlgeschlagen. Bitte erneut versuchen.');
-        const n = r.created || 0;
-        pending.length = 0;
-        await load(`${n} Lektion(en) erfolgreich gemeldet. Vielen Dank!`);
+        const r = await rpc('portal_submit', { p_token: token, p_entries: [{ pensum_id, date, minutes }] });
+        if (!r || r.ok !== true || r.created !== 1) throw new Error('Melden fehlgeschlagen. Bitte erneut versuchen.');
+        const p = pensa.find((x) => x.pensum_id === pensum_id);
+        if (p) p.remaining_minutes = Math.max(0, p.remaining_minutes - minutes);
+        logged.unshift({ pensum_id, date, minutes });
+        renderLog(); updateRemain();
+        btn.classList.add('ok'); btn.textContent = '✓ Gemeldet';
+        const msg = document.getElementById('msg');
+        msg.textContent = 'Lektion gemeldet. Du kannst gleich die nächste erfassen.'; msg.classList.add('show');
+        setTimeout(() => { btn.classList.remove('ok'); btn.textContent = 'Lektion melden'; btn.disabled = false; }, 900);
+        setTimeout(() => msg.classList.remove('show'), 2400);
+        document.getElementById('minutes').value = '60';
       } catch (e) {
-        btn.disabled = false; btn.textContent = 'Absenden';
+        btn.disabled = false; btn.textContent = 'Lektion melden';
         const b = document.createElement('div');
-        b.className = 'banner err'; b.textContent = e.message || 'Fehler beim Absenden.';
+        b.className = 'banner err'; b.textContent = e.message || 'Fehler beim Melden.';
         app.prepend(b);
       }
     }

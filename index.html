@@ -78,6 +78,13 @@
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     const deDate = (iso) => iso.split('-').reverse().join('.');
 
+    // Duration options in fixed 5-minute steps (15–240) — no free typing, so no 61 or 77.34.
+    function minuteOptions(selected) {
+      let out = '';
+      for (let m = 15; m <= 240; m += 5) out += `<option value="${m}"${m === selected ? ' selected' : ''}>${m} Min</option>`;
+      return out;
+    }
+
     async function rpc(fn, body) {
       let res;
       try {
@@ -109,7 +116,7 @@
               <select id="pensum">${opts}</select>
               <div class="row">
                 <div><label>Datum</label><input type="date" id="date" /></div>
-                <div><label>Dauer (Min)</label><input type="number" id="minutes" value="60" min="1" step="5" /></div>
+                <div><label>Dauer (Min)</label><select id="minutes">${minuteOptions(60)}</select></div>
               </div>
               <button class="btn-add" id="add">＋ Zur Liste hinzufügen</button>
               <div class="added-msg" id="addedMsg"></div>

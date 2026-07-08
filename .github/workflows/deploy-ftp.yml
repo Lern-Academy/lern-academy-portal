@@ -1,0 +1,30 @@
+name: Deploy portal to Hostinger (FTP)
+
+# Uploads the portal (index.html) to the portal.lern-academy.ch web space on
+# every push to main, and on manual trigger. FTP credentials are stored as
+# encrypted repo secrets (FTP_SERVER / FTP_USERNAME / FTP_PASSWORD).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # The .portal FTP account is scoped to the subdomain's public_html,
+          # so its login root IS the web folder. If the log shows a different
+          # root, this is the one line to change.
+          server-dir: ./
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/README*
